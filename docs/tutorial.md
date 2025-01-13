@@ -7,11 +7,12 @@
 可以发 GET 或者 POST 请求 ，请求成功会立即收到推送 
 
 ## URL格式
-URL由推送key、参数 title、参数 body 组成。有下面两种组合方式
+URL由推送key、参数 title、参数 subtitle、参数 body 组成。有下面三种组合方式
 
 ```
 /:key/:body 
 /:key/:title/:body 
+/:key/:title/:subtitle/:body 
 ```
 
 ## 请求方式
@@ -34,7 +35,6 @@ curl -X "POST" "https://api.day.app/your_key" \
   "body": "Test Bark Server",
   "title": "Test Title",
   "badge": 1,
-  "category": "myNotificationCategory",
   "sound": "minuet.caf",
   "icon": "https://day.app/assets/images/avatar.jpg",
   "group": "test",
@@ -59,13 +59,18 @@ curl -X "POST" "https://api.day.app/push" \
 | 参数 | 说明 |
 | ----- | ----------- |
 | title | 推送标题 |
+| subtitle | 推送副标题 |
 | body | 推送内容 |
 | level | 推送中断级别。 <br>active：默认值，系统会立即亮屏显示通知<br>timeSensitive：时效性通知，可在专注状态下显示通知。<br>passive：仅将通知添加到通知列表，不会亮屏提醒。 |
 | badge | 推送角标，可以是任意数字 |
 | autoCopy | iOS14.5以下自动复制推送内容，iOS14.5以上需手动长按推送或下拉推送 |
 | copy | 复制推送时，指定复制的内容，不传此参数将复制整个推送内容。 |
 | sound | 可以为推送设置不同的铃声 |
+| call | 通知铃声重复播放 |
 | icon | 为推送设置自定义图标，设置的图标将替换默认Bark图标。<br>图标会自动缓存在本机，相同的图标 URL 仅下载一次。 |
 | group | 对消息进行分组，推送将按group分组显示在通知中心中。<br>也可在历史消息列表中选择查看不同的群组。 |
+| ciphertext | 推送加密 |
+| level | 重要警告、时效性通知、静默通知 |
+| volume | 重要警告的通知音量，可不传 |
 | isArchive | 传 1 保存推送，传其他的不保存推送，不传按APP内设置来决定是否保存。 |
 | url | 点击推送时，跳转的URL ，支持URL Scheme 和 Universal Link |

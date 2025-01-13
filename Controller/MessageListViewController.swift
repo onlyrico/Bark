@@ -14,61 +14,101 @@ import RxDataSources
 import RxSwift
 import UIKit
 
-enum MessageDeleteType: Int {
-    case lastHour = 0
-    case today
-    case todayAndYesterday
-    case allTime
-    
-    var string: String {
-        return [
-            NSLocalizedString("lastHour"),
-            NSLocalizedString("today"),
-            NSLocalizedString("todayAndYesterday"),
-            NSLocalizedString("allTime"),
-        ][self.rawValue]
-    }
-}
-
 class MessageListViewController: BaseViewController<MessageListViewModel> {
-    let deleteButton: BKButton = {
-        let btn = BKButton()
-        btn.setImage(UIImage(named: "baseline_delete_outline_black_24pt"), for: .normal)
-        btn.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
-        return btn
+    lazy var deleteButton: UIBarButtonItem = {
+        if #available(iOS 14.0, *) {
+            var menuElements = [UIMenuElement]()
+            for range in [MessageDeleteTimeRange.lastHour, .today, .todayAndYesterday, .lastMonth, .allTime] {
+                let action = UIAction(title: range.string) { [weak self] _ in
+                    self?.clearAlert(range)
+                }
+                menuElements.append(action)
+            }
+            
+            var subMenuElements = [UIMenuElement]()
+            for range in [MessageDeleteTimeRange.beforeOneHour, .beforeToday, .beforeYesterday, .beforeOneMonth] {
+                let action = UIAction(title: range.string) { [weak self] _ in
+                    self?.clearAlert(range)
+                }
+                subMenuElements.append(action)
+            }
+            menuElements.append(UIMenu(title: NSLocalizedString("more"), children: subMenuElements))
+
+            let addNewMenu = UIMenu(
+                title: NSLocalizedString("clearFrom"),
+                children: menuElements
+            )
+            return UIBarButtonItem(image: UIImage(named: "baseline_delete_outline_black_24pt"), menu: addNewMenu)
+        } else {
+            let btn = BKButton()
+            btn.setImage(UIImage(named: "baseline_delete_outline_black_24pt"), for: .normal)
+            btn.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
+            return UIBarButtonItem(customView: btn)
+        }
+        
     }()
     
-    let groupButton: BKButton = {
+    let groupButton: UIBarButtonItem = {
         let btn = BKButton()
-        btn.setImage(UIImage(named: "baseline_folder_open_black_24pt"), for: .normal)
+        btn.setImage(UIImage(named: "group_expand")?.withRenderingMode(.alwaysTemplate), for: .normal)
+        btn.setImage(UIImage(named: "group_collapse")?.withRenderingMode(.alwaysTemplate), for: .selected)
+        btn.imageView?.tintColor = BKColor.black
         btn.frame = CGRect(x: 0, y: 0, width: 40, height: 40)
-        return btn
+        return UIBarButtonItem(customView: btn)
     }()
     
-    let tableView: UITableView = {
+    lazy var tableView: UITableView = {
         let tableView = UITableView()
         tableView.separatorStyle = .none
         tableView.backgroundColor = BKColor.background.primary
         tableView.register(MessageTableViewCell.self, forCellReuseIdentifier: "\(MessageTableViewCell.self)")
-        tableView.contentInset = UIEdgeInsets(top: 20, left: 0, bottom: 0, right: 0)
+        tableView.register(MessageGroupTableViewCell.self, forCellReuseIdentifier: "\(MessageGroupTableViewCell.self)")
+        // 设置了这个后，第一次进页面 LargeTitle 就会收缩成小标题，不设置这个LargeTitle就是大标题显示
+        // 谁特么能整的明白这个？
+        // tableView.contentInset = UIEdgeInsets(top: 20, left: 0, bottom: 0, right: 0)
+        
+        // 替代 contentInset 设置一个 header
+        tableView.tableHeaderView = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 20))
+        
+        tableView.rx.setDelegate(self).disposed(by: rx.disposeBag)
+        tableView.mj_footer = MJRefreshAutoFooter()
+        
         return tableView
     }()
-        
+    
+    /// 展开的群组
+    private var expandedGroup: Set<String> = []
+    /// 下拉刷新标记字段
+    private var canRefresh = true
+    
+    /// 群组中删除消息的事件流
+    private let itemDeleteInGroupRelay = PublishRelay<MessageItemModel>()
+    /// 下拉刷新事件流
+    private let refreshRelay = PublishRelay<Void>()
+    /// 重新刷新已加载的页的数据 （最多10页）
+    private let reloadRelay = PublishRelay<Void>()
+    /// 按时间范围清除消息事件流
+    private let clearRelay = PublishRelay<MessageDeleteTimeRange>()
+
     override func makeUI() {
         navigationItem.searchController = UISearchController(searchResultsController: nil)
         navigationItem.searchController?.obscuresBackgroundDuringPresentation = false
         navigationItem.searchController?.delegate = self
         
-        navigationItem.setBarButtonItems(items: [UIBarButtonItem(customView: deleteButton), UIBarButtonItem(customView: groupButton)], position: .right)
+        navigationItem.setBarButtonItems(items: [deleteButton, groupButton], position: .right)
         
         self.view.addSubview(tableView)
         tableView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
-        tableView.rx.setDelegate(self).disposed(by: rx.disposeBag)
-        tableView.mj_footer = MJRefreshAutoFooter()
-        tableView.refreshControl = UIRefreshControl()
 
+        if #available(iOS 14.0, *) {
+            // iOS 14 以上，使用 UIMenu
+        } else {
+            // 使用 UIAlertController
+            subscribeDeleteTap()
+        }
+        
         // 点击tab按钮，回到顶部
         Client.shared.currentTabBarController?
             .tabBarItemDidClick
@@ -77,124 +117,212 @@ class MessageListViewController: BaseViewController<MessageListViewModel> {
                 self?.scrollToTop()
             }).disposed(by: self.rx.disposeBag)
         
-        // 打开APP时，历史消息列表距离上次刷新超过1小时，则自动刷新一下
-        var lastAutoRefreshdate = Date()
         NotificationCenter.default.rx
             .notification(UIApplication.willEnterForegroundNotification)
-            .filter { _ in
-                let now = Date()
-                if now.timeIntervalSince1970 - lastAutoRefreshdate.timeIntervalSince1970 > 60 * 60 {
-                    lastAutoRefreshdate = now
-                    return true
-                }
-                return false
-            }
+            .delay(.milliseconds(500), scheduler: MainScheduler.instance) // 延迟0.5秒，等待数据库 Results 更新到最新数据集
             .subscribe(onNext: { [weak self] _ in
-                self?.tableView.refreshControl?.sendActions(for: .valueChanged)
-                self?.scrollToTop()
+                self?.reloadRelay.accept(())
             }).disposed(by: rx.disposeBag)
+        
+        // 点击群组消息，展开群
+        tableView.rx.itemSelected.subscribe(onNext: { [weak self] indexPath in
+            guard let self else { return }
+            if let cell = self.tableView.cellForRow(at: indexPath) as? MessageGroupTableViewCell {
+                if !cell.isExpanded {
+                    UIView.animate(withDuration: 0.6, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.2) {
+                        self.tableView.performBatchUpdates {
+                            cell.isExpanded = true
+                        }
+                    }
+                    if let groupName = cell.cellData?.groupName {
+                        self.expandedGroup.insert(groupName)
+                    }
+                }
+            }
+        }).disposed(by: rx.disposeBag)
     }
+
+    // tableView 数据源
+    private lazy var dataSource = RxTableViewSectionedAnimatedDataSource<MessageSection>(
+        animationConfiguration: AnimationConfiguration(
+            insertAnimation: .none,
+            reloadAnimation: .none,
+            deleteAnimation: .left
+        ),
+        configureCell: { [weak self] _, tableView, _, item -> UITableViewCell in
+            guard let self else { return UITableViewCell() }
+            
+            switch item {
+            case .message(let message):
+                guard let cell = tableView.dequeueReusableCell(withIdentifier: "\(MessageTableViewCell.self)") as? MessageTableViewCell else {
+                    return UITableViewCell()
+                }
+                cell.tapAction = { [weak self, weak cell] message, sourceView in
+                    guard let self, let cell else { return }
+                    self.alertMessage(message: message, sourceView: sourceView, sourceCell: cell)
+                }
+                cell.message = message
+                return cell
+            case .messageGroup(let title, let totalCount, let messages):
+                guard let cell = tableView.dequeueReusableCell(withIdentifier: "\(MessageGroupTableViewCell.self)") as? MessageGroupTableViewCell else {
+                    return UITableViewCell()
+                }
+                cell.showLessAction = { [weak self, weak cell] in
+                    guard let self else { return }
+                    UIView.animate(withDuration: 0.6, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.2) {
+                        self.tableView.performBatchUpdates {
+                            cell?.isExpanded = false
+                        }
+                        if let groupName = cell?.cellData?.groupName {
+                            self.expandedGroup.remove(groupName)
+                        }
+                    }
+                }
+                cell.showGroupMessageAction = { [weak self] group in
+                    let viewModel = MessageListViewModel(sourceType: .group(group))
+                    let controller = MessageListViewController(viewModel: viewModel)
+                    self?.navigationController?.pushViewController(controller, animated: true)
+                }
+                cell.clearAction = { [weak self, weak cell] in
+                    guard let self, let cell, let indexPath = self.tableView.indexPath(for: cell) else { return }
+                    self.tableView.dataSource?.tableView?(self.tableView, commit: .delete, forRowAt: indexPath)
+                }
+                cell.tapAction = { [weak self, weak cell] message, sourceView in
+                    guard let self, let cell else { return }
+                    self.alertMessage(message: message, sourceView: sourceView, sourceCell: cell)
+                }
+                cell.cellData = (title, totalCount, messages)
+                cell.isExpanded = self.expandedGroup.contains(title)
+                return cell
+            }
+
+        }, canEditRowAtIndexPath: { _, _ in
+            true
+        }
+    )
     
     override func bindViewModel() {
-        let batchDelete = deleteButton.rx
-            .tap
-            .flatMapLatest { _ -> PublishRelay<MessageDeleteType> in
-                let relay = PublishRelay<MessageDeleteType>()
-                
-                func alert(_ type: MessageDeleteType) {
-                    let alertController = UIAlertController(title: nil, message: "\(NSLocalizedString("clearFrom"))\n\(type.string)", preferredStyle: .alert)
-                    alertController.addAction(UIAlertAction(title: NSLocalizedString("clear"), style: .destructive, handler: { _ in
-                        relay.accept(type)
-                    }))
-                    alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: nil))
-                    self.navigationController?.present(alertController, animated: true, completion: nil)
-                }
-                
-                let alertController = UIAlertController(title: nil, message: NSLocalizedString("clearFrom"), preferredStyle: .actionSheet)
-                alertController.addAction(UIAlertAction(title: NSLocalizedString("lastHour"), style: .default, handler: { _ in
-                    alert(.lastHour)
-                }))
-                alertController.addAction(UIAlertAction(title: NSLocalizedString("today"), style: .default, handler: { _ in
-                    alert(.today)
-                }))
-                alertController.addAction(UIAlertAction(title: NSLocalizedString("todayAndYesterday"), style: .default, handler: { _ in
-                    alert(.todayAndYesterday)
-                }))
-                alertController.addAction(UIAlertAction(title: NSLocalizedString("allTime"), style: .default, handler: { _ in
-                    alert(.allTime)
-                }))
-                alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: nil))
-                self.navigationController?.present(alertController, animated: true, completion: nil)
-                
-                return relay
-            }
+        guard let groupBtn = groupButton.customView as? BKButton else {
+            return
+        }
         
         let output = viewModel.transform(
             input: MessageListViewModel.Input(
-                refresh: tableView.refreshControl!.rx.controlEvent(.valueChanged).asDriver(),
+                refresh: refreshRelay.asDriver(onErrorDriveWith: .empty()),
                 loadMore: tableView.mj_footer!.rx.refresh.asDriver(),
-                itemDelete: tableView.rx.itemDeleted.asDriver(),
-                itemSelected: tableView.rx.modelSelected(MessageTableViewCellViewModel.self).asDriver(),
-                delete: batchDelete.asDriver(onErrorDriveWith: .empty()),
-                groupTap: groupButton.rx.tap.asDriver(),
-                searchText: navigationItem.searchController!.searchBar.rx.text.asObservable()))
+                itemDelete: tableView.rx.modelDeleted(MessageListCellItem.self).asDriver(),
+                itemDeleteInGroup: itemDeleteInGroupRelay.asDriver(onErrorDriveWith: .empty()),
+                delete: clearRelay.asDriver(onErrorDriveWith: .empty()),
+                groupToggleTap: groupBtn.rx.tap.asDriver(),
+                searchText: navigationItem.searchController!.searchBar.rx.text.asObservable(),
+                reload: reloadRelay.asDriver(onErrorDriveWith: .empty())
+            ))
         
         // tableView 刷新状态
         output.refreshAction
             .drive(tableView.rx.refreshAction)
             .disposed(by: rx.disposeBag)
         
-        // tableView 数据源
-        let dataSource = RxTableViewSectionedAnimatedDataSource<MessageSection>(
-            animationConfiguration: AnimationConfiguration(
-                insertAnimation: .none,
-                reloadAnimation: .none,
-                deleteAnimation: .left),
-            configureCell: { _, tableView, _, item -> UITableViewCell in
-                guard let cell = tableView.dequeueReusableCell(withIdentifier: "\(MessageTableViewCell.self)") as? MessageTableViewCell else {
-                    return UITableViewCell()
-                }
-                cell.bindViewModel(model: item)
-                return cell
-            }, canEditRowAtIndexPath: { _, _ in
-                true
-            })
-        
         output.messages
             .drive(tableView.rx.items(dataSource: dataSource))
             .disposed(by: rx.disposeBag)
         
-        // message操作alert
-        output.alertMessage.drive(onNext: { [weak self] message in
-            self?.alertMessage(message: message)
-        }).disposed(by: rx.disposeBag)
-        
         // 选择群组
-        output.groupFilter
-            .drive(onNext: { [weak self] groupModel in
-                self?.navigationController?.present(BarkNavigationController(rootViewController: GroupFilterViewController(viewModel: groupModel)), animated: true, completion: nil)
+        output.type
+            .drive(onNext: { [weak self] type in
+                (self?.groupButton.customView as? UIButton)?.isSelected = type == .group
             }).disposed(by: rx.disposeBag)
         
         // 标题
         output.title
             .drive(self.navigationItem.rx.title).disposed(by: rx.disposeBag)
         
-        // 绑定数据后，滚动到顶部
-        self.scrollToTop()
+        // 数据库初始化出错错误提示
+        output.errorAlert
+            .drive(onNext: { [weak self] error in
+                let alertController = UIAlertController(title: "Error", message: error, preferredStyle: .alert)
+                alertController.addAction(UIAlertAction(title: NSLocalizedString("Copy2"), style: .default, handler: { _ in
+                    UIPasteboard.general.string = error
+                }))
+                alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: nil))
+                self?.present(alertController, animated: true, completion: nil)
+            }).disposed(by: rx.disposeBag)
+        
+        output.groupToggleButtonHidden
+            .drive((groupButton.customView as! UIButton).rx.isHidden).disposed(by: rx.disposeBag)
     }
     
-    func alertMessage(message: String) {
+    private func subscribeDeleteTap() {
+        guard let deleteBtn = deleteButton.customView as? BKButton else {
+            return
+        }
+        deleteBtn.rx.tap.subscribe(onNext: { [weak self] _ in
+            guard let self else { return }
+            
+            let alertController = UIAlertController(title: nil, message: NSLocalizedString("clearFrom"), preferredStyle: .actionSheet)
+            alertController.addAction(UIAlertAction(title: NSLocalizedString("lastHour"), style: .default, handler: { [weak self] _ in
+                self?.clearAlert(.lastHour)
+            }))
+            alertController.addAction(UIAlertAction(title: NSLocalizedString("today"), style: .default, handler: { [weak self] _ in
+                self?.clearAlert(.today)
+            }))
+            alertController.addAction(UIAlertAction(title: NSLocalizedString("todayAndYesterday"), style: .default, handler: { [weak self] _ in
+                self?.clearAlert(.todayAndYesterday)
+            }))
+            alertController.addAction(UIAlertAction(title: NSLocalizedString("allTime"), style: .default, handler: { [weak self] _ in
+                self?.clearAlert(.allTime)
+            }))
+            alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: nil))
+            if UIDevice.current.userInterfaceIdiom == .pad {
+                alertController.modalPresentationStyle = .popover
+                if #available(iOS 16.0, *) {
+                    alertController.popoverPresentationController?.sourceItem = self.deleteButton
+                } else {
+                    alertController.popoverPresentationController?.barButtonItem = self.deleteButton
+                }
+            }
+            self.navigationController?.present(alertController, animated: true, completion: nil)
+        }).disposed(by: rx.disposeBag)
+    }
+    
+    func clearAlert(_ range: MessageDeleteTimeRange) {
+        let alertController = UIAlertController(title: nil, message: "\(NSLocalizedString("clearFrom"))\n\(range.string)", preferredStyle: .alert)
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("clear"), style: .destructive, handler: { [weak self] _ in
+            self?.clearRelay.accept(range)
+        }))
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: nil))
+        self.navigationController?.present(alertController, animated: true, completion: nil)
+    }
+    
+    private func alertMessage(message: MessageItemModel, sourceView: UIView, sourceCell: UITableViewCell) {
         let alertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-        let copyAction = UIAlertAction(title: NSLocalizedString("CopyAll"), style: .default, handler: { [weak self]
-            (_: UIAlertAction) -> Void in
-            UIPasteboard.general.string = message
-            self?.showSnackbar(text: NSLocalizedString("Copy"))
-        })
         
-        let cancelAction = UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: { _ in })
+        // 复制
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("Copy2"), style: .default, handler: { [weak self]
+            (_: UIAlertAction) in
+                UIPasteboard.general.string = message.attributedText?.string
+                self?.showSnackbar(text: NSLocalizedString("Copy"))
+        }))
+        // 删除
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("removeMessage"), style: .destructive, handler: { [weak self]
+            (_: UIAlertAction) in
+                guard let self, let indexPath = self.tableView.indexPath(for: sourceCell) else { return }
+                if sourceCell is MessageTableViewCell {
+                    // 单个消息，把cell删除
+                    self.tableView.dataSource?.tableView?(self.tableView, commit: .delete, forRowAt: indexPath)
+                } else if sourceCell is MessageGroupTableViewCell {
+                    // 群组消息，只能删除群组中需删除的消息
+                    self.itemDeleteInGroupRelay.accept(message)
+                }
+        }))
+        // 取消
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: { _ in }))
         
-        alertController.addAction(copyAction)
-        alertController.addAction(cancelAction)
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            alertController.popoverPresentationController?.sourceView = sourceView.superview
+            alertController.popoverPresentationController?.sourceRect = sourceView.frame
+            alertController.modalPresentationStyle = .popover
+        }
         
         self.navigationController?.present(alertController, animated: true, completion: nil)
     }
@@ -209,8 +337,25 @@ class MessageListViewController: BaseViewController<MessageListViewModel> {
 extension MessageListViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         let action = UIContextualAction(style: .destructive, title: NSLocalizedString("removeMessage")) { [weak self] _, _, actionPerformed in
-            self?.tableView.dataSource?.tableView?(self!.tableView, commit: .delete, forRowAt: indexPath)
-            actionPerformed(true)
+            guard let self else { return }
+            
+            if self.tableView.cellForRow(at: indexPath) is MessageTableViewCell {
+                // 单个消息直接删除，不弹出提示
+                self.tableView.dataSource?.tableView?(self.tableView, commit: .delete, forRowAt: indexPath)
+                actionPerformed(true)
+                return
+            }
+            
+            // 群组消息删除，弹出个确认提示
+            let alertView = UIAlertController(title: nil, message: NSLocalizedString("removeNotice"), preferredStyle: .alert)
+            alertView.addAction(UIAlertAction(title: NSLocalizedString("removeMessage"), style: .destructive, handler: { _ in
+                self.tableView.dataSource?.tableView?(self.tableView, commit: .delete, forRowAt: indexPath)
+                actionPerformed(true)
+            }))
+            alertView.addAction(UIAlertAction(title: NSLocalizedString("Cancel"), style: .cancel, handler: { _ in
+                actionPerformed(false)
+            }))
+            self.present(alertView, animated: true, completion: nil)
         }
 
         let configuration = UISwipeActionsConfiguration(actions: [action])
@@ -238,6 +383,23 @@ extension MessageListViewController: UISearchControllerDelegate {
              */
             searchController.searchBar.searchTextField.text = nil
             searchController.searchBar.searchTextField.sendActions(for: .editingDidEnd)
+        }
+    }
+    
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+        if offset <= -10 && canRefresh {
+            // 触发下拉刷新，并震动
+            canRefresh = false
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            refreshRelay.accept(())
+        }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+        if offset >= 0 && !canRefresh {
+            canRefresh = true
         }
     }
 }

@@ -10,12 +10,13 @@ import Foundation
 import Intents
 
 class IconProcessor: NotificationContentProcessor {
-    func process(content bestAttemptContent: UNMutableNotificationContent) async throws -> UNMutableNotificationContent {
+    func process(identifier: String, content bestAttemptContent: UNMutableNotificationContent) async throws -> UNMutableNotificationContent {
         if #available(iOSApplicationExtension 15.0, *) {
             let userInfo = bestAttemptContent.userInfo
             
             guard let imageUrl = userInfo["icon"] as? String,
-                  let imageFileUrl = await ImageDownloader.downloadImage(imageUrl)
+                  let imageFileUrl = await ImageDownloader.downloadImage(imageUrl),
+                  let imageData = NSData(contentsOfFile: imageFileUrl)
             else {
                 return bestAttemptContent
             }
@@ -23,7 +24,7 @@ class IconProcessor: NotificationContentProcessor {
             var personNameComponents = PersonNameComponents()
             personNameComponents.nickname = bestAttemptContent.title
             
-            let avatar = INImage(imageData: NSData(contentsOfFile: imageFileUrl)! as Data)
+            let avatar = INImage(imageData: imageData as Data)
             let senderPerson = INPerson(
                 personHandle: INPersonHandle(value: "", type: .unknown),
                 nameComponents: personNameComponents,
@@ -45,18 +46,28 @@ class IconProcessor: NotificationContentProcessor {
                 suggestionType: .none
             )
             
+            // 必须两个接受者，才能显示 subtitle, 别问为什么
+            let placeholderPerson = INPerson(
+                personHandle: INPersonHandle(value: "", type: .unknown),
+                nameComponents: personNameComponents,
+                displayName: personNameComponents.nickname,
+                image: avatar,
+                contactIdentifier: nil,
+                customIdentifier: nil
+            )
+            
             let intent = INSendMessageIntent(
-                recipients: [mePerson],
+                recipients: [mePerson, placeholderPerson],
                 outgoingMessageType: .outgoingMessageText,
                 content: bestAttemptContent.body,
-                speakableGroupName: INSpeakableString(spokenPhrase: personNameComponents.nickname ?? ""),
+                speakableGroupName: INSpeakableString(spokenPhrase: bestAttemptContent.subtitle),
                 conversationIdentifier: bestAttemptContent.threadIdentifier,
                 serviceName: nil,
                 sender: senderPerson,
                 attachments: nil
             )
             
-            intent.setImage(avatar, forParameterNamed: \.sender)
+            intent.setImage(avatar, forParameterNamed: \.speakableGroupName)
             
             let interaction = INInteraction(intent: intent, response: nil)
             interaction.direction = .incoming

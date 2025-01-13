@@ -1,3 +1,5 @@
+source 'https://github.com/CocoaPods/Specs.git'
+
 platform:ios,'13.0'
 inhibit_all_warnings!
 use_modular_headers!
@@ -13,11 +15,10 @@ def pods
     pod 'ObjectMapper'
     pod 'SwiftyJSON'
     pod 'DeviceKit'
-    pod 'DefaultsKit', :git => 'https://github.com/nmdias/DefaultsKit'
-#    pod 'IceCream'
+    pod 'DefaultsKit'
     pod 'RealmSwift'
     pod 'CryptoSwift'
-    pod 'IQKeyboardManagerSwift'
+    pod 'IQKeyboardManagerSwift/IQKeyboardToolbarManager'
     
     pod 'RxSwift'
     pod 'RxCocoa'
@@ -31,6 +32,7 @@ def pods
     pod 'DropDown'
     
     pod 'PLCrashReporter'
+    pod 'SwiftyStoreKit'
 end
 
 target 'Bark' do
@@ -44,12 +46,16 @@ end
 
 
 target 'NotificationServiceExtension' do
-#    pod 'IceCream'
     pod 'RealmSwift'
     pod 'Kingfisher'
     pod 'CryptoSwift'
     pod 'SwiftyJSON'
 end
+
+target 'NotificationContentExtension' do
+    pod 'Kingfisher'
+end
+
 
 post_install do |installer|
     installer.pods_project.targets.each do |target|
@@ -59,6 +65,5 @@ post_install do |installer|
             end
             config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
         end
-        
     end
 end

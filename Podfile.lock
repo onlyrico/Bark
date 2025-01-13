@@ -1,13 +1,33 @@
 PODS:
-  - Alamofire (5.9.1)
-  - CryptoSwift (1.8.2)
-  - DefaultsKit (0.2.0)
-  - DeviceKit (5.4.0)
+  - Alamofire (5.10.2)
+  - CryptoSwift (1.8.3)
+  - DefaultsKit (0.3.2)
+  - DeviceKit (5.5.0)
   - Differentiator (5.0.0)
   - DropDown (2.3.13)
   - FDFullscreenPopGesture (1.1)
-  - IQKeyboardManagerSwift (7.0.3)
-  - Kingfisher (7.11.0)
+  - IQKeyboardCore (1.0.7)
+  - IQKeyboardManagerSwift/Core (8.0.0):
+    - IQKeyboardNotification
+    - IQTextInputViewNotification
+  - IQKeyboardManagerSwift/IQKeyboardToolbarManager (8.0.0):
+    - IQKeyboardManagerSwift/Core
+    - IQKeyboardToolbarManager
+  - IQKeyboardNotification (1.0.3)
+  - IQKeyboardToolbar (1.1.1):
+    - IQKeyboardCore
+    - IQKeyboardToolbar/Core (= 1.1.1)
+  - IQKeyboardToolbar/Core (1.1.1):
+    - IQKeyboardCore
+    - IQKeyboardToolbar/Placeholderable
+  - IQKeyboardToolbar/Placeholderable (1.1.1):
+    - IQKeyboardCore
+  - IQKeyboardToolbarManager (1.1.2):
+    - IQKeyboardToolbar
+    - IQTextInputViewNotification
+  - IQTextInputViewNotification (1.0.8):
+    - IQKeyboardCore
+  - Kingfisher (8.1.2)
   - KVOController (1.2.0)
   - Material (3.1.8):
     - Material/Core (= 3.1.8)
@@ -27,14 +47,14 @@ PODS:
     - RxSwift (~> 6.2)
   - ObjectMapper (4.4.2)
   - PLCrashReporter (1.11.2)
-  - Realm (10.50.1):
-    - Realm/Headers (= 10.50.1)
-  - Realm/Headers (10.50.1)
-  - RealmSwift (10.50.1):
-    - Realm (= 10.50.1)
-  - RxCocoa (6.7.1):
-    - RxRelay (= 6.7.1)
-    - RxSwift (= 6.7.1)
+  - Realm (20.0.0):
+    - Realm/Headers (= 20.0.0)
+  - Realm/Headers (20.0.0)
+  - RealmSwift (20.0.0):
+    - Realm (= 20.0.0)
+  - RxCocoa (6.8.0):
+    - RxRelay (= 6.8.0)
+    - RxSwift (= 6.8.0)
   - RxDataSources (5.0.0):
     - Differentiator (~> 5.0)
     - RxCocoa (~> 6.0)
@@ -42,22 +62,23 @@ PODS:
   - RxGesture (4.0.4):
     - RxCocoa (~> 6.0)
     - RxSwift (~> 6.0)
-  - RxRelay (6.7.1):
-    - RxSwift (= 6.7.1)
-  - RxSwift (6.7.1)
+  - RxRelay (6.8.0):
+    - RxSwift (= 6.8.0)
+  - RxSwift (6.8.0)
   - SnapKit (5.7.1)
   - SVProgressHUD (2.3.1):
     - SVProgressHUD/Core (= 2.3.1)
   - SVProgressHUD/Core (2.3.1)
   - SwiftyJSON (5.0.2)
+  - SwiftyStoreKit (0.16.1)
 
 DEPENDENCIES:
   - CryptoSwift
-  - DefaultsKit (from `https://github.com/nmdias/DefaultsKit`)
+  - DefaultsKit
   - DeviceKit
   - DropDown
   - FDFullscreenPopGesture
-  - IQKeyboardManagerSwift
+  - IQKeyboardManagerSwift/IQKeyboardToolbarManager
   - Kingfisher
   - KVOController
   - Material
@@ -75,16 +96,23 @@ DEPENDENCIES:
   - SnapKit
   - SVProgressHUD
   - SwiftyJSON
+  - SwiftyStoreKit
 
 SPEC REPOS:
-  trunk:
+  https://github.com/CocoaPods/Specs.git:
     - Alamofire
     - CryptoSwift
+    - DefaultsKit
     - DeviceKit
     - Differentiator
     - DropDown
     - FDFullscreenPopGesture
+    - IQKeyboardCore
     - IQKeyboardManagerSwift
+    - IQKeyboardNotification
+    - IQKeyboardToolbar
+    - IQKeyboardToolbarManager
+    - IQTextInputViewNotification
     - Kingfisher
     - KVOController
     - Material
@@ -104,31 +132,32 @@ SPEC REPOS:
     - SnapKit
     - SVProgressHUD
     - SwiftyJSON
+    - SwiftyStoreKit
 
 EXTERNAL SOURCES:
-  DefaultsKit:
-    :git: https://github.com/nmdias/DefaultsKit
   MercariQRScanner:
     :git: https://github.com/Finb/QRScanner
 
 CHECKOUT OPTIONS:
-  DefaultsKit:
-    :commit: c51ad1d66c4a84f26330399046b72c76cd39ddfd
-    :git: https://github.com/nmdias/DefaultsKit
   MercariQRScanner:
     :commit: 2b123c1b1492adc68f561a5f392727fdc3f31bb0
     :git: https://github.com/Finb/QRScanner
 
 SPEC CHECKSUMS:
-  Alamofire: f36a35757af4587d8e4f4bfa223ad10be2422b8c
-  CryptoSwift: c63a805d8bb5e5538e88af4e44bb537776af11ea
-  DefaultsKit: 6c767941b2c3fe34c4d70e300e6c3b80c94964dd
-  DeviceKit: bd34bb1766d926c3cc5a5f6e3e9a6dd10148b805
+  Alamofire: 7193b3b92c74a07f85569e1a6c4f4237291e7496
+  CryptoSwift: 967f37cea5a3294d9cce358f78861652155be483
+  DefaultsKit: ff9b29089d6fc08651b81be2d2387bee6eb98b75
+  DeviceKit: d83e38ca196a4ebf0cc5f37d6f0316a24b794d5b
   Differentiator: e8497ceab83c1b10ca233716d547b9af21b9344d
   DropDown: 8a2116376c1981888557f72ec2ffc9a5e0e456ec
   FDFullscreenPopGesture: a8a620179e3d9c40e8e00256dcee1c1a27c6d0f0
-  IQKeyboardManagerSwift: f9c5dc36cba16ddd2e51fa7d51c34a2e083029b5
-  Kingfisher: b9c985d864d43515f404f1ef4a8ce7d802ace3ac
+  IQKeyboardCore: cb7f0a9a17dd32599569f2f478c1418dc28bcebb
+  IQKeyboardManagerSwift: 0c6fbbaa2e60739e48d7cf59f25661471a7a3a65
+  IQKeyboardNotification: d7382c4466c5a5adef92c7452ebf861b36050088
+  IQKeyboardToolbar: d4bdccfb78324aec2f3920659c77bb89acd33312
+  IQKeyboardToolbarManager: 6f4072ac620c2572d4af8c09f42a801f3e4909f7
+  IQTextInputViewNotification: f5e954d8881fd9808b744e49e024cc0d4bcfe572
+  Kingfisher: dc989619594e24713c83e5a98f89f08850e0c529
   KVOController: d72ace34afea42468329623b3379ab3cd1d286b6
   Material: a2a3f400a3b549d53ef89e56c58c4535b29db387
   MercariQRScanner: cd024685242f78fe40879cca9734bb7bb2fceb93
@@ -138,17 +167,18 @@ SPEC CHECKSUMS:
   "NSObject+Rx": 61cf1f7306a73dcef8b36649198af0813ec18dfd
   ObjectMapper: e6e4d91ff7f2861df7aecc536c92d8363f4c9677
   PLCrashReporter: 499c53b0104f95c302d94fd723ebb03c56d9bac8
-  Realm: 36bc9fe2681d7cf234aa487e7990821c772206a2
-  RealmSwift: 84a370d3d4f191d327a9f8ade1f064a274f79847
-  RxCocoa: f5609cb4637587a7faa99c5d5787e3ad582b75a4
+  Realm: a799b5f9145623fb0bfe149fe81422863631dd0f
+  RealmSwift: f8c4354ebd5053343e6ab9f4eda244145308a51e
+  RxCocoa: 2d33c1e1e5d66492052ad46b11024ae287572880
   RxDataSources: aa47cc1ed6c500fa0dfecac5c979b723542d79cf
   RxGesture: f3efb47ed2d26a8082f7b660d4a59970e275a7f8
-  RxRelay: 4151ba01152436b08271e08410135e099880eae5
-  RxSwift: b9a93a26031785159e11abd40d1a55bcb8057e52
+  RxRelay: 335c78b926a2aea8d863a6d25f1ed3b5ad8e8705
+  RxSwift: 4e28be97cbcfeee614af26d83415febbf2bf6f45
   SnapKit: d612e99e678a2d3b95bf60b0705ed0a35c03484a
   SVProgressHUD: 4837c74bdfe2e51e8821c397825996a8d7de6e22
   SwiftyJSON: f5b1bf1cd8dd53cd25887ac0eabcfd92301c6a5a
+  SwiftyStoreKit: 6b9c08810269f030586dac1fae8e75871a82e84a
 
-PODFILE CHECKSUM: c9560d9c6653dd0da638d1f49876c91a02632de6
+PODFILE CHECKSUM: e499f90151cf50309319d3c7295e7cb0541725ef
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2
